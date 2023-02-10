@@ -1,0 +1,31 @@
+version: "3"
+
+services:
+  tigerbeetle:
+    platform: linux/amd64
+    build:
+      context: docker/tigerbeetle
+    image: pave-tigerbeetle:dev
+    volumes:
+      - tigerbeetle:/data
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      DATA_DIR: /data
+      DATA_FILE: 0_0.tigerbeetle
+
+  temporalite:
+    platform: linux/amd64
+    build:
+      context: docker/temporalite
+    image: pave-temporalite:dev
+    volumes:
+      - temporalite:/data
+
+volumes:
+  tigerbeetle:
+  temporalite:
+
+networks:
+  pave:
