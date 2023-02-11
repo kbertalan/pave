@@ -22,6 +22,8 @@ services:
     image: pave-temporalite:dev
     volumes:
       - temporalite:/data
+    ports:
+      - "7233:7233"
 
 volumes:
   tigerbeetle:
