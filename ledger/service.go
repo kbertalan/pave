@@ -9,19 +9,19 @@ import (
 	"go.temporal.io/sdk/worker"
 
 	"encore.app/ledger/activity"
-	"encore.app/ledger/tb"
-	"encore.app/ledger/workflow/balance"
+	"encore.app/ledger/workflow"
 )
 
 const (
-	paveTaskQueue = "pave-tq"
+	paveTaskQueue        = "pave-tq"
+	transferWorkflowName = "transferWorkflow"
 )
 
 //encore:service
 type Service struct {
-	client    client.Client
-	worker    worker.Worker
-	tbFactory *tb.Factory
+	client     client.Client
+	worker     worker.Worker
+	activities *activity.TigerBeetleActivities
 }
 
 func initService() (*Service, error) {
@@ -31,14 +31,16 @@ func initService() (*Service, error) {
 		return nil, fmt.Errorf("creating demo accounts failed: %v", err)
 	}
 
+	tbActivities := activity.NewTigerBeetleActivities(tbFactory)
+
 	c, err := client.Dial(client.Options{})
 	if err != nil {
 		return nil, fmt.Errorf("create temporal client failed: %v", err)
 	}
 
 	w := worker.New(c, paveTaskQueue, worker.Options{})
-	w.RegisterWorkflow(balance.GetBalance)
-	w.RegisterActivity(activity.NewTigerBeetleActivities(tbFactory))
+	w.RegisterWorkflow(workflow.Transfer)
+	w.RegisterActivity(tbActivities)
 
 	err = w.Start()
 	if err != nil {
@@ -46,7 +48,7 @@ func initService() (*Service, error) {
 		return nil, fmt.Errorf("start temporal worker failed: %v", err)
 	}
 
-	return &Service{client: c, worker: w, tbFactory: tbFactory}, nil
+	return &Service{client: c, worker: w, activities: tbActivities}, nil
 }
 
 func (s *Service) Shutdown(force context.Context) {

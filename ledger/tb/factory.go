@@ -1,13 +1,15 @@
 package tb
 
 import (
-	"strconv"
-
 	tigerbeetle_go "github.com/tigerbeetledb/tigerbeetle-go"
 	"github.com/tigerbeetledb/tigerbeetle-go/pkg/types"
+
+	"encore.app/ledger/model"
 )
 
 const LedgerNumber = 1
+
+var GodID = model.AccountID((1 << 63) - 1)
 
 type Config struct {
 	ClusterID      uint32
@@ -44,15 +46,12 @@ func (f *Factory) RegisterDemoAccounts(count uint) error {
 			Code:   1,
 		})
 	}
+	accounts = append(accounts, types.Account{
+		ID:     Uint128(uint64(GodID)),
+		Ledger: LedgerNumber,
+		Code:   1,
+	})
 
 	_, err = client.CreateAccounts(accounts)
 	return err
-}
-
-func Uint128(value uint64) types.Uint128 {
-	x, err := types.HexStringToUint128(strconv.FormatUint(value, 10))
-	if err != nil {
-		panic(err)
-	}
-	return x
 }
