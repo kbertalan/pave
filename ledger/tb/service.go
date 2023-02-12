@@ -1,4 +1,4 @@
-package activity
+package tb
 
 import (
 	"context"
@@ -9,23 +9,22 @@ import (
 	"github.com/tigerbeetledb/tigerbeetle-go/pkg/types"
 
 	"encore.app/ledger/model"
-	"encore.app/ledger/tb"
 )
 
 var (
 	ErrLowBalance = errors.New("balance is too low")
 )
 
-type TigerBeetleActivities struct {
-	factory *tb.Factory
+type Service struct {
+	factory *Factory
 }
 
-func NewTigerBeetleActivities(factory *tb.Factory) *TigerBeetleActivities {
-	return &TigerBeetleActivities{factory: factory}
+func NewTigerBeetleActivities(factory *Factory) *Service {
+	return &Service{factory: factory}
 }
 
-func (tba *TigerBeetleActivities) getAccount(client tigerbeetle_go.Client, accountID model.AccountID) (*tb.Account, error) {
-	accounts, err := client.LookupAccounts([]types.Uint128{tb.Uint128(uint64(accountID))})
+func (tba *Service) getAccount(client tigerbeetle_go.Client, accountID model.AccountID) (*Account, error) {
+	accounts, err := client.LookupAccounts([]types.Uint128{Uint128(uint64(accountID))})
 	if err != nil {
 		return nil, err
 	}
@@ -33,11 +32,11 @@ func (tba *TigerBeetleActivities) getAccount(client tigerbeetle_go.Client, accou
 		return nil, fmt.Errorf("could not find account with id %d", accountID)
 	}
 
-	account := tb.Account(accounts[0])
+	account := Account(accounts[0])
 	return &account, nil
 }
 
-func (tba *TigerBeetleActivities) GetBalance(ctx context.Context, accountID model.AccountID) (model.Amount, error) {
+func (tba *Service) GetBalance(ctx context.Context, accountID model.AccountID) (model.Amount, error) {
 	c, err := tba.factory.NewClient()
 	if err != nil {
 		return 0, err
@@ -51,7 +50,7 @@ func (tba *TigerBeetleActivities) GetBalance(ctx context.Context, accountID mode
 	return model.Amount(account.Balance()), nil
 }
 
-func (tba *TigerBeetleActivities) GetAvailableBalance(ctx context.Context, accountID model.AccountID) (model.Amount, error) {
+func (tba *Service) GetAvailableBalance(ctx context.Context, accountID model.AccountID) (model.Amount, error) {
 	c, err := tba.factory.NewClient()
 	if err != nil {
 		return 0, err
@@ -71,7 +70,7 @@ type PendingAuthorizeRequest struct {
 	Amount          model.TransferAmount
 }
 
-func (tba *TigerBeetleActivities) Authorize(ctx context.Context, req PendingAuthorizeRequest) error {
+func (tba *Service) Authorize(ctx context.Context, req PendingAuthorizeRequest) error {
 	c, err := tba.factory.NewClient()
 	if err != nil {
 		return err
@@ -85,10 +84,10 @@ func (tba *TigerBeetleActivities) Authorize(ctx context.Context, req PendingAuth
 
 	_, err = c.CreateTransfers([]types.Transfer{
 		{
-			ID:              tb.Uint128(uint64(req.ID)),
-			DebitAccountID:  tb.Uint128(uint64(tb.GodID)),
+			ID:              Uint128(uint64(req.ID)),
+			DebitAccountID:  Uint128(uint64(GodID)),
 			CreditAccountID: account.ID,
-			Ledger:          tb.LedgerNumber,
+			Ledger:          LedgerNumber,
 			Code:            1,
 			Amount:          uint64(req.Amount),
 			Flags: types.TransferFlags{
@@ -108,7 +107,7 @@ type CancelAuthorizeRequest struct {
 	PendingID model.PendingID
 }
 
-func (tba *TigerBeetleActivities) Cancel(ctx context.Context, req CancelAuthorizeRequest) error {
+func (tba *Service) Cancel(ctx context.Context, req CancelAuthorizeRequest) error {
 	c, err := tba.factory.NewClient()
 	if err != nil {
 		return err
@@ -117,8 +116,8 @@ func (tba *TigerBeetleActivities) Cancel(ctx context.Context, req CancelAuthoriz
 
 	_, err = c.CreateTransfers([]types.Transfer{
 		{
-			ID:        tb.Uint128(uint64(req.ID)),
-			PendingID: tb.Uint128(uint64(req.PendingID)),
+			ID:        Uint128(uint64(req.ID)),
+			PendingID: Uint128(uint64(req.PendingID)),
 			Flags: types.TransferFlags{
 				VoidPendingTransfer: true,
 			}.ToUint16(),
@@ -137,7 +136,7 @@ type TransferRequest struct {
 	Amount          model.TransferAmount
 }
 
-func (tba *TigerBeetleActivities) Transfer(ctx context.Context, req TransferRequest) error {
+func (tba *Service) Transfer(ctx context.Context, req TransferRequest) error {
 	c, err := tba.factory.NewClient()
 	if err != nil {
 		return err
@@ -156,10 +155,10 @@ func (tba *TigerBeetleActivities) Transfer(ctx context.Context, req TransferRequ
 
 	_, err = c.CreateTransfers([]types.Transfer{
 		{
-			ID:              tb.Uint128(uint64(req.ID)),
-			DebitAccountID:  tb.Uint128(uint64(tb.GodID)),
-			CreditAccountID: tb.Uint128(uint64(req.CreditAccountID)),
-			Ledger:          tb.LedgerNumber,
+			ID:              Uint128(uint64(req.ID)),
+			DebitAccountID:  Uint128(uint64(GodID)),
+			CreditAccountID: Uint128(uint64(req.CreditAccountID)),
+			Ledger:          LedgerNumber,
 			Code:            1,
 			Amount:          uint64(req.Amount),
 		},
@@ -173,7 +172,7 @@ type CompleteAuthorizeRequest struct {
 	Amount    model.TransferAmount
 }
 
-func (tba *TigerBeetleActivities) Complete(ctx context.Context, req CompleteAuthorizeRequest) error {
+func (tba *Service) Complete(ctx context.Context, req CompleteAuthorizeRequest) error {
 	c, err := tba.factory.NewClient()
 	if err != nil {
 		return err
@@ -182,8 +181,8 @@ func (tba *TigerBeetleActivities) Complete(ctx context.Context, req CompleteAuth
 
 	_, err = c.CreateTransfers([]types.Transfer{
 		{
-			ID:        tb.Uint128(uint64(req.ID)),
-			PendingID: tb.Uint128(uint64(req.PendingID)),
+			ID:        Uint128(uint64(req.ID)),
+			PendingID: Uint128(uint64(req.PendingID)),
 			Amount:    uint64(req.Amount),
 		},
 	})

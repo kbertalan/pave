@@ -20,8 +20,13 @@ func (tbc TigerBeetleConfig) NewFactory() *tb.Factory {
 	})
 }
 
+type TemporalConfig struct {
+	HostPort config.String
+}
+
 type ServiceConfig struct {
 	TigerBeetle TigerBeetleConfig
+	Temporal    TemporalConfig
 }
 
 var cfg = config.Load[*ServiceConfig]()

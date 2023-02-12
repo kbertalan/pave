@@ -8,7 +8,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 
-	"encore.app/ledger/activity"
+	"encore.app/ledger/tb"
 	"encore.app/ledger/workflow/transfer"
 )
 
@@ -21,7 +21,7 @@ const (
 type Service struct {
 	client     client.Client
 	worker     worker.Worker
-	activities *activity.TigerBeetleActivities
+	activities *tb.Service
 }
 
 func initService() (*Service, error) {
@@ -31,9 +31,11 @@ func initService() (*Service, error) {
 		return nil, fmt.Errorf("creating demo accounts failed: %v", err)
 	}
 
-	tbActivities := activity.NewTigerBeetleActivities(tbFactory)
+	tbActivities := tb.NewTigerBeetleActivities(tbFactory)
 
-	c, err := client.Dial(client.Options{})
+	c, err := client.Dial(client.Options{
+		HostPort: cfg.Temporal.HostPort(),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("create temporal client failed: %v", err)
 	}

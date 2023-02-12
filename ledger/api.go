@@ -47,7 +47,7 @@ func (s *Service) Authorize(ctx context.Context, accountID uint64, amount uint64
 	signalArg := transfer.AuthorizeSignal{
 		ReferenceID: model.NewReferenceID(),
 		Amount:      model.TransferAmount(amount),
-		ExpireAfter: 60 * time.Second,
+		ExpireAfter: 10 * time.Second,
 	}
 	workflowName := fmt.Sprintf("%s-%d", transferWorkflowName, accountID)
 

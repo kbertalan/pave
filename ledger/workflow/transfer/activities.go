@@ -4,17 +4,18 @@ import (
 	"fmt"
 	"time"
 
+	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
-	"encore.app/ledger/activity"
+	"encore.app/ledger/tb"
 )
 
 type activities interface {
-	Authorize(ctx workflow.Context, req activity.PendingAuthorizeRequest) error
-	Cancel(ctx workflow.Context, req activity.CancelAuthorizeRequest) error
-	Transfer(ctx workflow.Context, req activity.TransferRequest) error
-	Complete(ctx workflow.Context, req activity.CompleteAuthorizeRequest) error
+	Authorize(ctx workflow.Context, req tb.PendingAuthorizeRequest) error
+	Cancel(ctx workflow.Context, req tb.CancelAuthorizeRequest) error
+	Transfer(ctx workflow.Context, req tb.TransferRequest) error
+	Complete(ctx workflow.Context, req tb.CompleteAuthorizeRequest) error
 
 	ScheduleCancelProcess(ctx workflow.Context, req CancelAuthorizationRequest) string
 	TerminateCancelProcess(ctx workflow.Context, req TerminateCancelRequest) error
@@ -22,7 +23,7 @@ type activities interface {
 
 type transferActivities struct{}
 
-func (a transferActivities) Authorize(ctx workflow.Context, request activity.PendingAuthorizeRequest) error {
+func (a transferActivities) Authorize(ctx workflow.Context, request tb.PendingAuthorizeRequest) error {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: time.Second * 5,
 		RetryPolicy: &temporal.RetryPolicy{
@@ -34,7 +35,7 @@ func (a transferActivities) Authorize(ctx workflow.Context, request activity.Pen
 		},
 	})
 
-	var tba *activity.TigerBeetleActivities
+	var tba *tb.Service
 	err := workflow.ExecuteActivity(ctx, tba.Authorize, request).Get(ctx, nil)
 	if err != nil {
 		return nil // TODO handle errors
@@ -43,7 +44,7 @@ func (a transferActivities) Authorize(ctx workflow.Context, request activity.Pen
 	return nil
 }
 
-func (a transferActivities) Cancel(ctx workflow.Context, request activity.CancelAuthorizeRequest) error {
+func (a transferActivities) Cancel(ctx workflow.Context, request tb.CancelAuthorizeRequest) error {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: time.Second * 5,
 		RetryPolicy: &temporal.RetryPolicy{
@@ -55,7 +56,7 @@ func (a transferActivities) Cancel(ctx workflow.Context, request activity.Cancel
 		},
 	})
 
-	var tba *activity.TigerBeetleActivities
+	var tba *tb.Service
 	err := workflow.ExecuteActivity(ctx, tba.Cancel, request).Get(ctx, nil)
 	if err != nil {
 		return nil // TODO handle errors
@@ -64,7 +65,7 @@ func (a transferActivities) Cancel(ctx workflow.Context, request activity.Cancel
 	return nil
 }
 
-func (a transferActivities) Transfer(ctx workflow.Context, request activity.TransferRequest) error {
+func (a transferActivities) Transfer(ctx workflow.Context, request tb.TransferRequest) error {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: time.Second * 5,
 		RetryPolicy: &temporal.RetryPolicy{
@@ -76,7 +77,7 @@ func (a transferActivities) Transfer(ctx workflow.Context, request activity.Tran
 		},
 	})
 
-	var tba *activity.TigerBeetleActivities
+	var tba *tb.Service
 	err := workflow.ExecuteActivity(ctx, tba.Transfer, request).Get(ctx, nil)
 	if err != nil {
 		return nil // TODO handle errors
@@ -85,7 +86,7 @@ func (a transferActivities) Transfer(ctx workflow.Context, request activity.Tran
 	return nil
 }
 
-func (a transferActivities) Complete(ctx workflow.Context, request activity.CompleteAuthorizeRequest) error {
+func (a transferActivities) Complete(ctx workflow.Context, request tb.CompleteAuthorizeRequest) error {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: time.Second * 5,
 		RetryPolicy: &temporal.RetryPolicy{
@@ -97,7 +98,7 @@ func (a transferActivities) Complete(ctx workflow.Context, request activity.Comp
 		},
 	})
 
-	var tba *activity.TigerBeetleActivities
+	var tba *tb.Service
 	err := workflow.ExecuteActivity(ctx, tba.Complete, request).Get(ctx, nil)
 	if err != nil {
 		return nil // TODO handle errors
@@ -109,7 +110,8 @@ func (a transferActivities) Complete(ctx workflow.Context, request activity.Comp
 func (a transferActivities) ScheduleCancelProcess(ctx workflow.Context, req CancelAuthorizationRequest) string {
 	childID := fmt.Sprintf("cancel-%s", req.ReferenceID)
 	ctx = workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-		WorkflowID: childID,
+		WorkflowID:        childID,
+		ParentClosePolicy: enums.PARENT_CLOSE_POLICY_ABANDON,
 	})
 	workflow.ExecuteChildWorkflow(ctx, CancelWorkflow, req)
 

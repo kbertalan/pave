@@ -30,12 +30,12 @@ type PresentSignal struct {
 	Amount      model.TransferAmount
 }
 
-func Workflow(ctx workflow.Context, accountId model.AccountID, state *transferState) error {
+func Workflow(ctx workflow.Context, accountId model.AccountID, state *State) error {
 	handledSignalsCount := 0
 	if state == nil {
-		state = &transferState{
-			pending:   make([]*transfer, 0, 10),
-			transfers: make(map[model.ReferenceID]*transfer),
+		state = &State{
+			Pending:   make([]*Transfer, 0, 10),
+			Transfers: make(map[model.ReferenceID]*Transfer),
 		}
 	}
 
@@ -81,11 +81,5 @@ func Workflow(ctx workflow.Context, accountId model.AccountID, state *transferSt
 			return err
 		}
 		handledSignalsCount++
-
-		if !selector.HasPending() && handledSignalsCount >= 20 {
-			break
-		}
 	}
-
-	return workflow.NewContinueAsNewError(ctx, Workflow, accountId, state)
 }
