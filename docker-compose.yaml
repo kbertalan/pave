@@ -24,6 +24,7 @@ services:
       - temporalite:/data
     ports:
       - "7233:7233"
+      - "8233:8233"
 
 volumes:
   tigerbeetle:

@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/client"
 
 	"encore.app/ledger/model"
-	"encore.app/ledger/workflow"
+	"encore.app/ledger/workflow/transfer"
 )
 
 // GetBalance retrieves the actual balance of the account
@@ -44,30 +45,29 @@ func (s *Service) GetAvailableBalance(ctx context.Context, accountID uint64) (*m
 
 //encore:api public method=POST path=/authorize/:accountID/:amount
 func (s *Service) Authorize(ctx context.Context, accountID uint64, amount uint64) (*model.AuthorizeResponse, error) {
-	signalArg := workflow.AuthorizeSignal{
+	signalArg := transfer.AuthorizeSignal{
+		ReferenceID: uuid.New().String(),
 		Amount:      model.TransferAmount(amount),
 		ExpireAfter: 10 * time.Second,
 	}
 	workflowName := fmt.Sprintf("%s-%d", transferWorkflowName, accountID)
 
-	err := s.client.SignalWorkflow(ctx, workflowName, "", workflow.AuthorizeSignalName, signalArg)
+	err := s.client.SignalWorkflow(ctx, workflowName, "", transfer.AuthorizeSignalName, signalArg)
 	if err != nil {
 		switch err.(type) {
 		case *serviceerror.NotFound:
-		// continue
-		default:
-			return nil, err
+			_, err = s.client.SignalWithStartWorkflow(ctx, workflowName, transfer.AuthorizeSignalName, signalArg, client.StartWorkflowOptions{
+				ID:        workflowName,
+				TaskQueue: paveTaskQueue,
+			}, transfer.TransferWorkflow, model.AccountID(accountID), nil)
 		}
 	}
-
-	_, err = s.client.SignalWithStartWorkflow(ctx, workflowName, workflow.AuthorizeSignalName, signalArg, client.StartWorkflowOptions{
-		ID:        workflowName,
-		TaskQueue: paveTaskQueue,
-	}, workflow.Transfer, model.AccountID(accountID))
 
 	if err != nil {
 		return nil, err
 	}
 
-	return &model.AuthorizeResponse{}, nil
+	return &model.AuthorizeResponse{
+		ReferenceID: signalArg.ReferenceID,
+	}, nil
 }

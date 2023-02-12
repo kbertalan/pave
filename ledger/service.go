@@ -9,7 +9,7 @@ import (
 	"go.temporal.io/sdk/worker"
 
 	"encore.app/ledger/activity"
-	"encore.app/ledger/workflow"
+	"encore.app/ledger/workflow/transfer"
 )
 
 const (
@@ -39,7 +39,8 @@ func initService() (*Service, error) {
 	}
 
 	w := worker.New(c, paveTaskQueue, worker.Options{})
-	w.RegisterWorkflow(workflow.Transfer)
+	w.RegisterWorkflow(transfer.TransferWorkflow)
+	w.RegisterWorkflow(transfer.CancelWorkflow)
 	w.RegisterActivity(tbActivities)
 
 	err = w.Start()

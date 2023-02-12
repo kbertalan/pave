@@ -77,10 +77,6 @@ func (tba *TigerBeetleActivities) Authorize(ctx context.Context, req PendingAuth
 		return err
 	}
 
-	//if available := account.AvailableBalance(); available < 0 || uint64(available) < uint64(req.Amount) {
-	//	return fmt.Errorf("balance has not enough assets for authorization")
-	//}
-
 	_, err = c.CreateTransfers([]types.Transfer{
 		{
 			ID:              tb.Uint128(uint64(req.ID)),
@@ -91,6 +87,39 @@ func (tba *TigerBeetleActivities) Authorize(ctx context.Context, req PendingAuth
 			Amount:          uint64(req.Amount),
 			Flags: types.TransferFlags{
 				Pending: true,
+			}.ToUint16(),
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+type CancelAuthorizeRequest struct {
+	ID              model.CancelID
+	PendingID       model.PendingID
+	CreditAccountID model.AccountID
+}
+
+func (tba *TigerBeetleActivities) Cancel(ctx context.Context, req CancelAuthorizeRequest) error {
+	c, err := tba.factory.NewClient()
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+
+	_, err = c.CreateTransfers([]types.Transfer{
+		{
+			ID:              tb.Uint128(uint64(req.ID)),
+			PendingID:       tb.Uint128(uint64(req.PendingID)),
+			DebitAccountID:  tb.Uint128(uint64(tb.GodID)),
+			CreditAccountID: tb.Uint128(uint64(req.CreditAccountID)),
+			Ledger:          tb.LedgerNumber,
+			Code:            1,
+			Flags: types.TransferFlags{
+				VoidPendingTransfer: true,
 			}.ToUint16(),
 		},
 	})
