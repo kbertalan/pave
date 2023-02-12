@@ -53,5 +53,22 @@ func (f *Factory) RegisterDemoAccounts(count uint) error {
 	})
 
 	_, err = client.CreateAccounts(accounts)
+	if err != nil {
+		return err
+	}
+
+	transfers := make([]types.Transfer, 0, count)
+	for i := 0; uint(i) <= count; i++ {
+		transfers = append(transfers, types.Transfer{
+			ID:              Uint128(uint64(i)),
+			DebitAccountID:  Uint128(uint64(i)),
+			CreditAccountID: Uint128(uint64(GodID)),
+			Ledger:          LedgerNumber,
+			Code:            1,
+			Amount:          10000,
+		})
+	}
+
+	_, err = client.CreateTransfers(transfers)
 	return err
 }

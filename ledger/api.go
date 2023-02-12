@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/client"
 
@@ -46,9 +45,9 @@ func (s *Service) GetAvailableBalance(ctx context.Context, accountID uint64) (*m
 //encore:api public method=POST path=/authorize/:accountID/:amount
 func (s *Service) Authorize(ctx context.Context, accountID uint64, amount uint64) (*model.AuthorizeResponse, error) {
 	signalArg := transfer.AuthorizeSignal{
-		ReferenceID: uuid.New().String(),
+		ReferenceID: model.NewReferenceID(),
 		Amount:      model.TransferAmount(amount),
-		ExpireAfter: 10 * time.Second,
+		ExpireAfter: 60 * time.Second,
 	}
 	workflowName := fmt.Sprintf("%s-%d", transferWorkflowName, accountID)
 
@@ -59,7 +58,7 @@ func (s *Service) Authorize(ctx context.Context, accountID uint64, amount uint64
 			_, err = s.client.SignalWithStartWorkflow(ctx, workflowName, transfer.AuthorizeSignalName, signalArg, client.StartWorkflowOptions{
 				ID:        workflowName,
 				TaskQueue: paveTaskQueue,
-			}, transfer.TransferWorkflow, model.AccountID(accountID), nil)
+			}, transfer.Workflow, model.AccountID(accountID), nil)
 		}
 	}
 
@@ -70,4 +69,32 @@ func (s *Service) Authorize(ctx context.Context, accountID uint64, amount uint64
 	return &model.AuthorizeResponse{
 		ReferenceID: signalArg.ReferenceID,
 	}, nil
+}
+
+//encore:api public method=POST path=/present/:accountID/:amount
+func (s *Service) Present(ctx context.Context, accountID uint64, amount uint64) (*model.PresentResponse, error) {
+	signalArg := transfer.PresentSignal{
+		ReferenceID: model.NewReferenceID(),
+		Amount:      model.TransferAmount(amount),
+	}
+	workflowName := fmt.Sprintf("%s-%d", transferWorkflowName, accountID)
+
+	err := s.client.SignalWorkflow(ctx, workflowName, "", transfer.PresentSignalName, signalArg)
+	if err != nil {
+		switch err.(type) {
+		case *serviceerror.NotFound:
+			_, err = s.client.SignalWithStartWorkflow(ctx, workflowName, transfer.PresentSignalName, signalArg, client.StartWorkflowOptions{
+				ID:        workflowName,
+				TaskQueue: paveTaskQueue,
+			}, transfer.Workflow, model.AccountID(accountID), nil)
+		}
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &model.PresentResponse{
+		ReferenceID: signalArg.ReferenceID,
+	}, err
 }

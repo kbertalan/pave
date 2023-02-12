@@ -39,7 +39,7 @@ func initService() (*Service, error) {
 	}
 
 	w := worker.New(c, paveTaskQueue, worker.Options{})
-	w.RegisterWorkflow(transfer.TransferWorkflow)
+	w.RegisterWorkflow(transfer.Workflow)
 	w.RegisterWorkflow(transfer.CancelWorkflow)
 	w.RegisterActivity(tbActivities)
 

@@ -11,11 +11,11 @@ import (
 
 type transferState struct {
 	pending   []*transfer
-	transfers map[string]*transfer
+	transfers map[model.ReferenceID]*transfer
 }
 
 type transfer struct {
-	refID            string
+	referenceID      model.ReferenceID
 	pendingID        model.PendingID
 	cancelWorkflowID string
 	status           transferStatus
@@ -26,14 +26,14 @@ type transfer struct {
 type transferStatus uint8
 
 const (
-	TransferRequested transferStatus = iota
-	TransferPending
-	TransferCompleted
-	TransferFailed
-	TransferCancelled
+	StatusRequested transferStatus = iota
+	StatusPending
+	StatusCompleted
+	StatusFailed
+	StatusCancelled
 )
 
-func (s *transferState) handleAuthorize(ctx workflow.Context, authorize AuthorizeSignal, accountId model.AccountID, a transferActivities) error {
+func (s *transferState) handleAuthorize(ctx workflow.Context, authorize AuthorizeSignal, accountId model.AccountID, a activities) error {
 	req := activity.PendingAuthorizeRequest{
 		ID:              model.PendingID(idFromTime(ctx)),
 		CreditAccountID: accountId,
@@ -41,19 +41,19 @@ func (s *transferState) handleAuthorize(ctx workflow.Context, authorize Authoriz
 	}
 
 	tr := &transfer{
-		refID:       authorize.ReferenceID,
+		referenceID: authorize.ReferenceID,
 		pendingID:   req.ID,
-		status:      TransferRequested,
+		status:      StatusRequested,
 		amount:      authorize.Amount,
 		expireAfter: authorize.ExpireAfter,
 	}
 
 	s.pending = append(s.pending, tr)
-	s.transfers[tr.refID] = tr
+	s.transfers[tr.referenceID] = tr
 
 	err := a.Authorize(ctx, req)
 	if err != nil {
-		tr.status = TransferFailed
+		tr.status = StatusFailed
 		return err // TODO error handling
 	}
 
@@ -62,25 +62,23 @@ func (s *transferState) handleAuthorize(ctx workflow.Context, authorize Authoriz
 		ExpireAfter: authorize.ExpireAfter,
 	}
 
-	childID := a.ScheduleCancel(ctx, creq)
+	childID := a.ScheduleCancelProcess(ctx, creq)
 
-	tr.status = TransferPending
+	tr.status = StatusPending
 	tr.cancelWorkflowID = childID
 	return nil
 }
 
-func (s *transferState) handleCancel(ctx workflow.Context, cancel CancelSignal, accountID model.AccountID, a transferActivities) error {
+func (s *transferState) handleCancel(ctx workflow.Context, cancel CancelSignal, accountID model.AccountID, a activities) error {
 	tr := s.transfers[cancel.ReferenceID]
 
-	if tr.status != TransferPending {
-		// if somebody completed the transfer, do nothing
+	if tr.status != StatusPending && tr.status != StatusFailed {
 		return nil
 	}
 
 	req := activity.CancelAuthorizeRequest{
-		ID:              model.CancelID(idFromTime(ctx)),
-		PendingID:       tr.pendingID,
-		CreditAccountID: accountID,
+		ID:        model.CancelID(idFromTime(ctx)),
+		PendingID: tr.pendingID,
 	}
 
 	err := a.Cancel(ctx, req)
@@ -88,7 +86,71 @@ func (s *transferState) handleCancel(ctx workflow.Context, cancel CancelSignal, 
 		// keep transfer in pending state
 		return err
 	}
-	tr.status = TransferCancelled
+	tr.status = StatusCancelled
+	return nil
+}
+
+func (s *transferState) handlePresent(ctx workflow.Context, present PresentSignal, accountID model.AccountID, a activities) error {
+	tr := findFirstMatching(s.pending, present.Amount)
+	if tr == nil {
+		return s.handleTransfer(ctx, present, accountID, a)
+	}
+
+	s.transfers[present.ReferenceID] = tr
+
+	req := activity.CompleteAuthorizeRequest{
+		ID:        model.TransferID(idFromTime(ctx)),
+		PendingID: tr.pendingID,
+		Amount:    tr.amount,
+	}
+
+	err := a.Complete(ctx, req)
+	if err != nil {
+		tr.status = StatusFailed
+		return nil
+	}
+
+	tr.status = StatusCompleted
+
+	if tr.cancelWorkflowID != "" {
+		treq := TerminateCancelRequest{
+			WorkflowID: tr.cancelWorkflowID,
+		}
+
+		err = a.TerminateCancelProcess(ctx, treq)
+		if err != nil {
+			// ignoring, as cancel handler cancels only if it sees pending or failed transfer
+			return nil
+		}
+	}
+
+	return nil
+}
+
+func (s *transferState) handleTransfer(ctx workflow.Context, present PresentSignal, accountID model.AccountID, a activities) error {
+	tr := &transfer{
+		referenceID:      present.ReferenceID,
+		pendingID:        0,
+		cancelWorkflowID: "",
+		status:           StatusRequested,
+		amount:           present.Amount,
+		expireAfter:      0,
+	}
+	s.transfers[tr.referenceID] = tr
+
+	req := activity.TransferRequest{
+		ID:              model.TransferID(idFromTime(ctx)),
+		CreditAccountID: accountID,
+		Amount:          present.Amount,
+	}
+
+	err := a.Transfer(ctx, req)
+	if err != nil {
+		tr.status = StatusFailed
+		return err
+	}
+
+	tr.status = StatusCompleted
 	return nil
 }
 
@@ -96,4 +158,13 @@ func (s *transferState) handleCancel(ctx workflow.Context, cancel CancelSignal, 
 func idFromTime(ctx workflow.Context) uint64 {
 	now := workflow.Now(ctx)
 	return uint64(now.UnixNano())
+}
+
+func findFirstMatching(pending []*transfer, amount model.TransferAmount) *transfer {
+	for _, v := range pending {
+		if v != nil && v.status == StatusPending && v.amount == amount {
+			return v
+		}
+	}
+	return nil
 }

@@ -4,11 +4,17 @@ import (
 	"time"
 
 	"go.temporal.io/sdk/workflow"
+
+	"encore.app/ledger/model"
 )
 
 type CancelAuthorizationRequest struct {
-	ReferenceID string
+	ReferenceID model.ReferenceID
 	ExpireAfter time.Duration
+}
+
+type TerminateCancelRequest struct {
+	WorkflowID string
 }
 
 func CancelWorkflow(ctx workflow.Context, req CancelAuthorizationRequest) error {

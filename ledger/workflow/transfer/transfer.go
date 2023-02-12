@@ -11,24 +11,31 @@ import (
 const (
 	AuthorizeSignalName = "authorize"
 	CancelSignalName    = "cancel"
+
+	PresentSignalName = "present"
 )
 
 type AuthorizeSignal struct {
-	ReferenceID string
+	ReferenceID model.ReferenceID
 	Amount      model.TransferAmount
 	ExpireAfter time.Duration
 }
 
 type CancelSignal struct {
-	ReferenceID string
+	ReferenceID model.ReferenceID
 }
 
-func TransferWorkflow(ctx workflow.Context, accountId model.AccountID, state *transferState) error {
+type PresentSignal struct {
+	ReferenceID model.ReferenceID
+	Amount      model.TransferAmount
+}
+
+func Workflow(ctx workflow.Context, accountId model.AccountID, state *transferState) error {
 	handledSignalsCount := 0
 	if state == nil {
 		state = &transferState{
 			pending:   make([]*transfer, 0, 10),
-			transfers: make(map[string]*transfer),
+			transfers: make(map[model.ReferenceID]*transfer),
 		}
 	}
 
@@ -39,6 +46,9 @@ func TransferWorkflow(ctx workflow.Context, accountId model.AccountID, state *tr
 	var cancel CancelSignal
 	cancelChan := workflow.GetSignalChannel(ctx, CancelSignalName)
 
+	var present PresentSignal
+	presentChan := workflow.GetSignalChannel(ctx, PresentSignalName)
+
 	selector := workflow.NewSelector(ctx)
 	selector.AddReceive(authorizeChan, func(c workflow.ReceiveChannel, more bool) {
 		c.Receive(ctx, &authorize)
@@ -47,6 +57,10 @@ func TransferWorkflow(ctx workflow.Context, accountId model.AccountID, state *tr
 	selector.AddReceive(cancelChan, func(c workflow.ReceiveChannel, more bool) {
 		c.Receive(ctx, &cancel)
 		triggeredSignalName = CancelSignalName
+	})
+	selector.AddReceive(presentChan, func(c workflow.ReceiveChannel, more bool) {
+		c.Receive(ctx, &present)
+		triggeredSignalName = PresentSignalName
 	})
 
 	for {
@@ -59,6 +73,8 @@ func TransferWorkflow(ctx workflow.Context, accountId model.AccountID, state *tr
 			err = state.handleAuthorize(ctx, authorize, accountId, transferActivities{})
 		case CancelSignalName:
 			err = state.handleCancel(ctx, cancel, accountId, transferActivities{})
+		case PresentSignalName:
+			err = state.handlePresent(ctx, present, accountId, transferActivities{})
 		}
 
 		if err != nil {
@@ -71,5 +87,5 @@ func TransferWorkflow(ctx workflow.Context, accountId model.AccountID, state *tr
 		}
 	}
 
-	return workflow.NewContinueAsNewError(ctx, TransferWorkflow, accountId, state)
+	return workflow.NewContinueAsNewError(ctx, Workflow, accountId, state)
 }
